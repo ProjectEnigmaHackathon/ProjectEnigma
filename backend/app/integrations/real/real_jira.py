@@ -312,3 +312,80 @@ class RealJiraClient(JiraInterface):
         except Exception as e:
             logger.error(f"Unexpected error validating JIRA connection: {str(e)}")
             raise APIConnectionError("JIRA", self.base_url, str(e))
+
+    async def get_ticket_ids_by_custom_field(
+        self, custom_field_name: str, custom_field_value: str, project_keys: list = None
+    ) -> list[str]:
+        """
+        Fetch JIRA ticket IDs based on custom field name and value.
+
+        Args:
+            custom_field_name (str): Name of the custom field (e.g., "Sprint", "Epic Link")
+            custom_field_value (str): Value to search for
+            project_keys (list, optional): List of project keys to filter by
+
+        Returns:
+            list[str]: List of JIRA ticket IDs (keys)
+        """
+
+        try:
+
+            await self.rate_limiter.acquire("jira", "server_info")
+
+            client = self._get_client()
+
+            fields = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: client.fields()
+            )
+            print("custom_field_name", custom_field_name)
+            print("fields", fields)
+            # Find the custom field ID
+            custom_field_id = None
+            for field in fields:
+                if field["name"].lower() == custom_field_name.lower() and field.get(
+                    "custom", False
+                ):
+                    print("fieldname", field["name"])
+                    custom_field_id = field["id"]
+                    break
+
+            if not custom_field_id:
+                print(f"❌ Custom field '{custom_field_name}' not found!")
+                print("Available custom fields:")
+                for field in fields:
+                    if field.get("custom", False):
+                        print(f"  - {field['name']} (ID: {field['id']})")
+                return []
+
+            print(f"✓ Found custom field ID: {custom_field_id}")
+
+            # Build JQL query
+            jql_parts = [f'"{custom_field_name}" = "{custom_field_value}"']
+
+            if project_keys:
+                project_filter = " OR ".join(
+                    [f'project = "{key}"' for key in project_keys]
+                )
+                jql_parts.append(f"({project_filter})")
+
+            jql = " AND ".join(jql_parts)
+            print(f"JQL Query: {jql}")
+
+            # Search for tickets
+            print("Searching for tickets...")
+            issues = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: client.search_issues(
+                    jql, maxResults=1000, fields="key,summary"
+                ),
+            )
+
+            # Extract ticket IDs
+            ticket_ids = [issue.key for issue in issues]
+
+            print(f"✓ Found {len(ticket_ids)} tickets")
+            return ticket_ids
+
+        except Exception as e:
+            print(f"❌ Error: {str(e)}")
+            return []
