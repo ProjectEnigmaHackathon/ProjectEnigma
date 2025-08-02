@@ -6,7 +6,7 @@ FastAPI backend service for the AI-powered release documentation automation tool
 
 ### Prerequisites
 
-- Python 3.11 or higher
+- Python 3.12 or higher
 - Git
 
 ### Local Development Setup

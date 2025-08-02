@@ -115,7 +115,7 @@ Technical implementation requirements for Project Enigma, an AI-powered release 
 ## Technical Architecture Summary
 
 - **Frontend:** React 18 + TypeScript + Tailwind CSS + Vite
-- **Backend:** FastAPI + LangGraph + Python 3.11+ + Uvicorn
+- **Backend:** FastAPI + LangGraph + Python 3.12+ + Uvicorn
 - **State Management:** In-memory + JSON file persistence
 - **API Integrations:** PyGithub + python-jira + atlassian-python-api (with mock alternatives)
 - **Authentication:** Environment variable-based API tokens

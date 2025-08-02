@@ -73,7 +73,7 @@ Project Enigma consists of two main components:
 - React Router for navigation
 
 **Backend:**
-- FastAPI + Python 3.11+
+- FastAPI + Python 3.12+
 - LangGraph for AI workflows
 - Pydantic for data validation
 - Structured logging with JSON
