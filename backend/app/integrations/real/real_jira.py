@@ -290,7 +290,7 @@ class RealJiraClient(JiraInterface):
             )
 
             user = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: client.user(self.username)
+                None, lambda: client.user("712020:064ed71a-dcdd-4760-9e90-a3b40392bc11")
             )
 
             return {

@@ -234,7 +234,10 @@ class RealConfluenceClient(ConfluenceInterface):
 
             # Test authentication by getting current user
             user_info = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: client.get_current_user()
+                None,
+                lambda: client.get_user_details_by_accountid(
+                    "712020:064ed71a-dcdd-4760-9e90-a3b40392bc11"
+                ),
             )
 
             self._authenticated = True
@@ -395,7 +398,6 @@ class RealConfluenceClient(ConfluenceInterface):
                     page_id=page_id,
                     title=title,
                     body=content,
-                    version=version + 1,
                     representation="storage",
                 ),
             )
@@ -528,7 +530,10 @@ class RealConfluenceClient(ConfluenceInterface):
 
             # Get user info and server info
             user_info = await asyncio.get_event_loop().run_in_executor(
-                None, lambda: client.get_current_user()
+                None,
+                lambda: client.get_user_details_by_accountid(
+                    "712020:064ed71a-dcdd-4760-9e90-a3b40392bc11"
+                ),
             )
 
             # Try to get server info (may not be available on all instances)
