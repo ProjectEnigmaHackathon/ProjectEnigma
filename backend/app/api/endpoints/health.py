@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from app.core.config import Settings, get_settings
 from app.integrations.auth_manager import AuthenticationManager as AuthManager
 from app.models.api import HealthResponse, MetricsResponse, SystemStatus
+from app.core.logging_utils import log_api_endpoint, LogLevel
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -155,6 +156,7 @@ def get_system_metrics() -> SystemMetrics:
 
 
 @router.get("/health", response_model=HealthResponse)
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def health_check(
     settings: Settings = Depends(get_settings)
 ) -> HealthResponse:
@@ -235,6 +237,7 @@ async def health_check(
 
 
 @router.get("/health/ready")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def readiness_check() -> Dict[str, Any]:
     """
     Kubernetes-style readiness probe.
@@ -262,6 +265,7 @@ async def readiness_check() -> Dict[str, Any]:
 
 
 @router.get("/health/live")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def liveness_check() -> Dict[str, Any]:
     """
     Kubernetes-style liveness probe.
@@ -277,6 +281,7 @@ async def liveness_check() -> Dict[str, Any]:
 
 
 @router.get("/metrics", response_model=MetricsResponse)
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def get_metrics() -> MetricsResponse:
     """
     Get detailed application metrics and performance data.

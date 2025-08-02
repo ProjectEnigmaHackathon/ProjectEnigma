@@ -24,6 +24,7 @@ from app.models.api import (
 )
 from app.workflows.workflow_manager import get_workflow_manager
 from app.workflows.release_workflow import extract_workflow_params
+from app.core.logging_utils import log_api_endpoint, LogLevel
 
 router = APIRouter()
 
@@ -95,16 +96,32 @@ def format_workflow_messages(messages: List) -> List[Dict[str, any]]:
     
     for msg in messages:
         if hasattr(msg, 'content'):
+            # It's a message object
             formatted_messages.append({
                 "type": msg.__class__.__name__,
                 "content": msg.content,
                 "timestamp": getattr(msg, 'timestamp', None),
+            })
+        elif isinstance(msg, dict) and "content" in msg:
+            # It's already a dictionary with content
+            formatted_messages.append({
+                "type": msg.get("type", "UnknownMessage"),
+                "content": msg.get("content", ""),
+                "timestamp": msg.get("timestamp", None),
+            })
+        else:
+            # Fallback for unknown message types
+            formatted_messages.append({
+                "type": "UnknownMessage",
+                "content": str(msg),
+                "timestamp": None,
             })
     
     return formatted_messages
 
 
 @router.post("/", response_model=ChatResponse)
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def send_message(request: ChatRequest):
     """
     Send a chat message and start/continue workflow execution.
@@ -165,6 +182,7 @@ async def send_message(request: ChatRequest):
 
 
 @router.get("/status/{workflow_id}")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def get_workflow_status(workflow_id: str):
     """Get current status of a workflow."""
     try:
@@ -194,6 +212,7 @@ async def get_workflow_status(workflow_id: str):
 
 
 @router.get("/stream/{workflow_id}")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def stream_workflow_updates(workflow_id: str):
     """
     Stream real-time workflow updates.
@@ -239,6 +258,7 @@ async def stream_workflow_updates(workflow_id: str):
 
 
 @router.websocket("/ws/{workflow_id}")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def websocket_workflow_updates(websocket: WebSocket, workflow_id: str):
     """WebSocket endpoint for real-time workflow updates."""
     await websocket.accept()
@@ -273,6 +293,7 @@ async def websocket_workflow_updates(websocket: WebSocket, workflow_id: str):
 
 
 @router.post("/approval")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def handle_approval(request: ApprovalRequest):
     """Handle user approval for workflow steps requiring human intervention."""
     try:
@@ -315,6 +336,7 @@ async def handle_approval(request: ApprovalRequest):
 
 
 @router.post("/pause/{workflow_id}")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def pause_workflow(workflow_id: str):
     """Pause a running workflow."""
     try:
@@ -334,6 +356,7 @@ async def pause_workflow(workflow_id: str):
 
 
 @router.post("/cancel/{workflow_id}")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def cancel_workflow(workflow_id: str):
     """Cancel a workflow."""
     try:
@@ -353,6 +376,7 @@ async def cancel_workflow(workflow_id: str):
 
 
 @router.get("/list")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def list_workflows():
     """List all active workflows."""
     try:
@@ -369,6 +393,7 @@ async def list_workflows():
 
 
 @router.delete("/{workflow_id}")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def delete_workflow(workflow_id: str):
     """Delete a workflow and its associated data."""
     try:

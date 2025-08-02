@@ -18,6 +18,32 @@ from langgraph.prebuilt import ToolNode
 from app.core.config import get_settings
 from app.integrations.factory import APIClientFactory
 from app.models.api import ChatRequest
+from app.core.logging_utils import log_workflow_function, LogLevel
+
+
+def check_step_completion(state: "WorkflowState", step_name: str, step_title: str) -> bool:
+    """
+    Check if a step has already been completed to prevent duplicate execution.
+    
+    Args:
+        state: Current workflow state
+        step_name: Name of the step to check
+        step_title: Human-readable title for the step
+        
+    Returns:
+        True if step is already completed, False otherwise
+    """
+    if step_name in state.get("steps_completed", []):
+        from langchain_core.messages import AIMessage
+        from langgraph.graph.message import add_messages
+        
+        resume_msg = AIMessage(
+            content=f"🔄 **{step_title} (Resumed)**\n"
+            f"Step already completed. Skipping execution.\n\n"
+        )
+        state["messages"] = add_messages(state["messages"], [resume_msg])
+        return True
+    return False
 
 
 async def _calculate_next_version(github_client, state: "WorkflowState") -> str:
@@ -185,20 +211,11 @@ def handle_workflow_error(
 
 def should_continue_workflow(state: "WorkflowState") -> str:
     """Determine the next step based on workflow state."""
-    if state.get("error") and not state.get("can_continue"):
-        return "error_handler"
-
-    if state.get("approval_required"):
-        return "human_approval"
-
-    if state.get("workflow_complete"):
-        return "complete"
-
     current_step = state.get("current_step", "")
 
     # Define the workflow flow
     step_flow = {
-        "initialization": "jira_collection",
+        "start": "jira_collection",
         "jira_collection": "branch_discovery",
         "branch_discovery": "merge_validation",
         "merge_validation": "human_approval",
@@ -211,6 +228,36 @@ def should_continue_workflow(state: "WorkflowState") -> str:
         "documentation": "complete",
         "error": "error_handler",
     }
+    
+    # Handle paused workflows - stay at current step
+    if state.get("workflow_paused"):
+        return current_step if current_step else "error_handler"
+    
+    # Handle error states first
+    if state.get("error") and not state.get("can_continue"):
+        return "error_handler"
+
+    # Handle approval states
+    if state.get("approval_required"):
+        return "human_approval"
+
+    # Handle completion
+    if state.get("workflow_complete"):
+        return "complete"
+
+    # Handle resuming from a specific step
+    if current_step and current_step in step_flow:
+        # If we're resuming and the current step is already completed, move to next
+        steps_completed = state.get("steps_completed", [])
+        if current_step in steps_completed:
+            return step_flow.get(current_step, "complete")
+        else:
+            # Resume from the current step
+            return current_step
+
+    # Handle unknown states
+    if current_step not in step_flow:
+        return "error_handler"
 
     return step_flow.get(current_step, "complete")
 
@@ -260,57 +307,82 @@ class WorkflowState(TypedDict):
 def create_release_workflow() -> StateGraph:
     """Create and configure the release automation workflow."""
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def start_workflow(state: WorkflowState) -> WorkflowState:
         """Initialize the workflow with user input."""
         try:
-            state["current_step"] = "initialization"
-            state["workflow_complete"] = False
-            state["workflow_paused"] = False
-            state["error"] = ""
-            state["error_step"] = ""
-            state["retry_count"] = 0
-            state["can_continue"] = True
-            state["steps_completed"] = []
-            state["steps_failed"] = []
-            state["approval_required"] = False
-            state["approval_message"] = ""
-            state["approval_id"] = ""
-            state["approval_decision"] = {}
-
-            # Generate workflow ID if not present
-            if not state.get("workflow_id"):
-                import uuid
-
-                state["workflow_id"] = str(uuid.uuid4())
-
-            # Add initial message
-            ai_msg = AIMessage(content="🚀 Starting release automation workflow...\n\n")
-            state["messages"] = add_messages(state["messages"], [ai_msg])
-
-            # Extract workflow parameters
-            repositories = state.get("repositories", [])
-            fix_version = state.get("fix_version", "v2.1.0")
-            sprint_name = state.get("sprint_name", "sprint-2024-01")
-
-            config_msg = AIMessage(
-                content=f"📋 **Release Configuration:**\n"
-                f"- Workflow ID: {state['workflow_id'][:8]}...\n"
-                f"- Fix Version: {fix_version}\n"
-                f"- Sprint Branch: {sprint_name}\n"
-                f"- Target Repositories: {', '.join(repositories)}\n\n"
+            # Check if this is a fresh start or a resume
+            is_resume = state.get("workflow_id") and (
+                state.get("steps_completed") or 
+                state.get("current_step") != "start" or
+                state.get("workflow_complete") is True
             )
-            state["messages"] = add_messages(state["messages"], [config_msg])
+            
+            if not is_resume:
+                # Fresh start - initialize all state variables
+                state["current_step"] = "start"
+                state["workflow_complete"] = False
+                state["workflow_paused"] = False
+                state["error"] = ""
+                state["error_step"] = ""
+                state["retry_count"] = 0
+                state["can_continue"] = True
+                state["steps_completed"] = []
+                state["steps_failed"] = []
+                state["approval_required"] = False
+                state["approval_message"] = ""
+                state["approval_id"] = ""
+                state["approval_decision"] = {}
 
-            state["steps_completed"].append("initialization")
+                # Generate workflow ID if not present
+                if not state.get("workflow_id"):
+                    import uuid
+                    state["workflow_id"] = str(uuid.uuid4())
+
+                # Add initial message for fresh start
+                ai_msg = AIMessage(content="🚀 Starting release automation workflow...\n\n")
+                state["messages"] = add_messages(state["messages"], [ai_msg])
+
+                # Extract workflow parameters
+                repositories = state.get("repositories", [])
+                fix_version = state.get("fix_version", "v2.1.0")
+                sprint_name = state.get("sprint_name", "sprint-2024-01")
+
+                config_msg = AIMessage(
+                    content=f"📋 **Release Configuration:**\n"
+                    f"- Workflow ID: {state['workflow_id'][:8]}...\n"
+                    f"- Fix Version: {fix_version}\n"
+                    f"- Sprint Branch: {sprint_name}\n"
+                    f"- Target Repositories: {', '.join(repositories)}\n\n"
+                )
+                state["messages"] = add_messages(state["messages"], [config_msg])
+
+                state["steps_completed"].append("start")
+            else:
+                # Resume - preserve existing state and add resume message
+                resume_msg = AIMessage(content="🔄 Resuming release automation workflow...\n\n")
+                state["messages"] = add_messages(state["messages"], [resume_msg])
+                
+                # Clear any previous errors when resuming
+                state["error"] = ""
+                state["error_step"] = ""
+                state["can_continue"] = True
+                state["workflow_paused"] = False
+
             await asyncio.sleep(0.5)
             return state
 
         except Exception as e:
-            return handle_workflow_error(state, "initialization", str(e))
+            return handle_workflow_error(state, "start", str(e))
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def collect_jira_tickets(state: WorkflowState) -> WorkflowState:
         """Step 1: Collect JIRA tickets for the fix version."""
         try:
+            # Check if this step has already been completed
+            if check_step_completion(state, "jira_collection", "Step 1: Collecting JIRA Tickets"):
+                return state
+
             state["current_step"] = "jira_collection"
 
             msg = AIMessage(
@@ -321,7 +393,7 @@ def create_release_workflow() -> StateGraph:
 
             # Initialize API clients
             factory = APIClientFactory()
-            clients = factory.create_clients()
+            clients = factory.create_all_clients()
             jira_client = clients.jira
 
             try:
@@ -412,9 +484,14 @@ def create_release_workflow() -> StateGraph:
         except Exception as e:
             return handle_workflow_error(state, "jira_collection", str(e))
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def discover_feature_branches(state: WorkflowState) -> WorkflowState:
         """Step 2: Discover feature branches for JIRA tickets."""
         try:
+            # Check if this step has already been completed
+            if check_step_completion(state, "branch_discovery", "Step 2: Feature Branch Discovery"):
+                return state
+
             state["current_step"] = "branch_discovery"
 
             msg = AIMessage(
@@ -425,7 +502,7 @@ def create_release_workflow() -> StateGraph:
 
             # Initialize API clients
             factory = APIClientFactory()
-            clients = factory.create_clients()
+            clients = factory.create_all_clients()
             github_client = clients.github
 
             jira_tickets = state.get("jira_tickets", [])
@@ -517,9 +594,14 @@ def create_release_workflow() -> StateGraph:
         except Exception as e:
             return handle_workflow_error(state, "branch_discovery", str(e))
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def validate_merge_status(state: WorkflowState) -> WorkflowState:
         """Step 3: Validate merge status of feature branches."""
         try:
+            # Check if this step has already been completed
+            if check_step_completion(state, "merge_validation", "Step 3: Merge Status Validation"):
+                return state
+
             state["current_step"] = "merge_validation"
 
             msg = AIMessage(
@@ -530,7 +612,7 @@ def create_release_workflow() -> StateGraph:
 
             # Initialize API clients
             factory = APIClientFactory()
-            clients = factory.create_clients()
+            clients = factory.create_all_clients()
             github_client = clients.github
 
             feature_branches = state.get("feature_branches", {})
@@ -632,9 +714,14 @@ def create_release_workflow() -> StateGraph:
         except Exception as e:
             return handle_workflow_error(state, "merge_validation", str(e))
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def request_human_approval(state: WorkflowState) -> WorkflowState:
         """Step 4: Request human approval for proceeding."""
         try:
+            # Check if this step has already been completed
+            if check_step_completion(state, "human_approval", "Step 4: Human Approval"):
+                return state
+
             from app.api.endpoints.workflow import create_approval_checkpoint
 
             state["current_step"] = "human_approval"
@@ -691,8 +778,9 @@ def create_release_workflow() -> StateGraph:
                     state["error"] = "Workflow cancelled by user denial"
                     return state
             else:
-                # Wait for approval - this will cause the workflow to pause
+                # Wait for approval - keep workflow at this step until approval is received
                 # The workflow will be resumed by the approval endpoint
+                state["approval_required"] = True
                 state["workflow_paused"] = True
 
                 # Update workflow manager metadata to reflect paused state
@@ -707,7 +795,7 @@ def create_release_workflow() -> StateGraph:
                         workflow_id, state, metadata
                     )
 
-                # Pause execution by returning without continuing
+                # Return state to keep workflow at this step
                 return state
 
             return state
@@ -715,9 +803,14 @@ def create_release_workflow() -> StateGraph:
         except Exception as e:
             return handle_workflow_error(state, "human_approval", str(e))
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def merge_sprint_branches(state: WorkflowState) -> WorkflowState:
         """Step 5: Merge sprint branches to develop."""
         try:
+            # Check if this step has already been completed
+            if check_step_completion(state, "sprint_merging", f"Step 5: Merging {state['sprint_name']} to develop"):
+                return state
+
             state["current_step"] = "sprint_merging"
 
             msg = AIMessage(
@@ -728,7 +821,7 @@ def create_release_workflow() -> StateGraph:
 
             # Initialize API clients
             factory = APIClientFactory()
-            clients = factory.create_clients()
+            clients = factory.create_all_clients()
             github_client = clients.github
 
             sprint_merge_results = {}
@@ -880,9 +973,14 @@ def create_release_workflow() -> StateGraph:
         except Exception as e:
             return handle_workflow_error(state, "sprint_merging", str(e))
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def create_release_branches(state: WorkflowState) -> WorkflowState:
         """Step 6: Create release branches with semantic versioning."""
         try:
+            # Check if this step has already been completed
+            if check_step_completion(state, "release_creation", "Step 6: Creating Release Branches"):
+                return state
+
             state["current_step"] = "release_branch_creation"
 
             msg = AIMessage(
@@ -893,7 +991,7 @@ def create_release_workflow() -> StateGraph:
 
             # Initialize API clients
             factory = APIClientFactory()
-            clients = factory.create_clients()
+            clients = factory.create_all_clients()
             github_client = clients.github
 
             release_branches = []
@@ -1007,9 +1105,14 @@ def create_release_workflow() -> StateGraph:
         except Exception as e:
             return handle_workflow_error(state, "release_branch_creation", str(e))
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def generate_pull_requests(state: WorkflowState) -> WorkflowState:
         """Step 7: Generate pull requests from release branches to master."""
         try:
+            # Check if this step has already been completed
+            if check_step_completion(state, "pr_generation", "Step 7: Generating Pull Requests"):
+                return state
+
             state["current_step"] = "pull_request_generation"
 
             msg = AIMessage(
@@ -1020,7 +1123,7 @@ def create_release_workflow() -> StateGraph:
 
             # Initialize API clients
             factory = APIClientFactory()
-            clients = factory.create_clients()
+            clients = factory.create_all_clients()
             github_client = clients.github
 
             calculated_version = state.get(
@@ -1132,9 +1235,14 @@ def create_release_workflow() -> StateGraph:
         except Exception as e:
             return handle_workflow_error(state, "pull_request_generation", str(e))
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def create_release_tags(state: WorkflowState) -> WorkflowState:
         """Step 8: Create release tags with semantic versioning and metadata."""
         try:
+            # Check if this step has already been completed
+            if check_step_completion(state, "release_tagging", "Step 8: Creating Release Tags"):
+                return state
+
             state["current_step"] = "release_tagging"
 
             calculated_version = state.get(
@@ -1149,7 +1257,7 @@ def create_release_workflow() -> StateGraph:
 
             # Initialize API clients
             factory = APIClientFactory()
-            clients = factory.create_clients()
+            clients = factory.create_all_clients()
             github_client = clients.github
 
             release_tags = []
@@ -1258,9 +1366,14 @@ def create_release_workflow() -> StateGraph:
         except Exception as e:
             return handle_workflow_error(state, "release_tagging", str(e))
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def prepare_rollback_branches(state: WorkflowState) -> WorkflowState:
         """Step 9: Prepare rollback branches with proper naming conventions."""
         try:
+            # Check if this step has already been completed
+            if check_step_completion(state, "rollback_preparation", "Step 9: Preparing Rollback Branches"):
+                return state
+
             state["current_step"] = "rollback_preparation"
 
             calculated_version = state.get(
@@ -1275,7 +1388,7 @@ def create_release_workflow() -> StateGraph:
 
             # Initialize API clients
             factory = APIClientFactory()
-            clients = factory.create_clients()
+            clients = factory.create_all_clients()
             github_client = clients.github
 
             rollback_branches = []
@@ -1547,9 +1660,14 @@ def create_release_workflow() -> StateGraph:
 
         return html_content.strip()
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def generate_confluence_docs(state: WorkflowState) -> WorkflowState:
         """Step 10: Generate comprehensive Confluence deployment documentation."""
         try:
+            # Check if this step has already been completed
+            if check_step_completion(state, "documentation", "Step 10: Generating Confluence Documentation"):
+                return state
+
             state["current_step"] = "documentation_generation"
 
             msg = AIMessage(
@@ -1560,7 +1678,7 @@ def create_release_workflow() -> StateGraph:
 
             # Initialize API clients
             factory = APIClientFactory()
-            clients = factory.create_clients()
+            clients = factory.create_all_clients()
             confluence_client = clients.confluence
 
             # Generate documentation content
@@ -1637,6 +1755,7 @@ def create_release_workflow() -> StateGraph:
         except Exception as e:
             return handle_workflow_error(state, "documentation_generation", str(e))
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def handle_workflow_error_node(state: WorkflowState) -> WorkflowState:
         """Handle errors and provide recovery options."""
         error_step = state.get("error_step", "unknown")
@@ -1659,14 +1778,18 @@ def create_release_workflow() -> StateGraph:
         )
         state["messages"] = add_messages(state["messages"], [recovery_msg])
 
-        # For demonstration, auto-recover by clearing error and continuing
+        # Auto-recover by clearing error and resuming from the failed step
         if retry_count < 3:
             state["retry_count"] = retry_count + 1
             state["error"] = ""
+            state["error_step"] = ""
             state["can_continue"] = True
+            
+            # Resume from the failed step instead of continuing to next
+            state["current_step"] = error_step
 
             recovery_msg = AIMessage(
-                content=f"✅ **Auto-recovery attempt {retry_count + 1}** - clearing error and continuing...\n\n"
+                content=f"✅ **Auto-recovery attempt {retry_count + 1}** - resuming from step '{error_step}'...\n\n"
             )
             state["messages"] = add_messages(state["messages"], [recovery_msg])
         else:
@@ -1680,6 +1803,7 @@ def create_release_workflow() -> StateGraph:
 
         return state
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def complete_workflow(state: WorkflowState) -> WorkflowState:
         """Final step: Complete the workflow."""
         state["current_step"] = "complete"
@@ -1871,8 +1995,8 @@ def extract_workflow_params(request: ChatRequest) -> Dict[str, Any]:
     message_parts = request.message.lower().split()
 
     # Extract fix version and sprint info from message
-    fix_version = request.fixVersion or "v2.1.0"
-    sprint_name = request.sprintName or "sprint-2024-01"
+    fix_version = request.fix_version or "v2.1.0"
+    sprint_name = request.sprint_name or "sprint-2024-01"
 
     for i, part in enumerate(message_parts):
         if "version" in part and i + 1 < len(message_parts):
@@ -1884,5 +2008,5 @@ def extract_workflow_params(request: ChatRequest) -> Dict[str, Any]:
         "repositories": request.repositories or ["frontend", "backend", "api-service"],
         "fix_version": fix_version,
         "sprint_name": sprint_name,
-        "release_type": request.releaseType or "release",
+        "release_type": request.release_type or "release",
     }

@@ -12,6 +12,7 @@ from ...core.exceptions import (
 )
 from ...models.api import RepositoryConfig, RepositoryRequest
 from ...services.repository_service import RepositoryService
+from ...core.logging_utils import log_api_endpoint, LogLevel
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -23,6 +24,7 @@ def get_repository_service() -> RepositoryService:
 
 
 @router.get("/", response_model=List[RepositoryConfig])
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def get_repositories(
     service: RepositoryService = Depends(get_repository_service),
 ):
@@ -37,6 +39,7 @@ async def get_repositories(
 
 
 @router.get("/{repo_id}", response_model=RepositoryConfig)
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def get_repository(
     repo_id: str, service: RepositoryService = Depends(get_repository_service)
 ):
@@ -54,6 +57,7 @@ async def get_repository(
 
 
 @router.post("/", response_model=RepositoryConfig, status_code=201)
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def create_repository(
     request: RepositoryRequest,
     service: RepositoryService = Depends(get_repository_service),
@@ -80,6 +84,7 @@ async def create_repository(
 
 
 @router.put("/{repo_id}", response_model=RepositoryConfig)
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def update_repository(
     repo_id: str,
     request: RepositoryRequest,
@@ -110,6 +115,7 @@ async def update_repository(
 
 
 @router.delete("/{repo_id}", status_code=204)
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def delete_repository(
     repo_id: str, service: RepositoryService = Depends(get_repository_service)
 ):
@@ -127,6 +133,7 @@ async def delete_repository(
 
 
 @router.get("/stats/summary")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def get_repository_statistics(
     service: RepositoryService = Depends(get_repository_service),
 ):
@@ -141,6 +148,7 @@ async def get_repository_statistics(
 
 
 @router.get("/backups/list")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def list_backups(service: RepositoryService = Depends(get_repository_service)):
     """List available backup files."""
     try:
@@ -153,6 +161,7 @@ async def list_backups(service: RepositoryService = Depends(get_repository_servi
 
 
 @router.post("/backups/restore/{backup_filename}")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def restore_backup(
     backup_filename: str, service: RepositoryService = Depends(get_repository_service)
 ):

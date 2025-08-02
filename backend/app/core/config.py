@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     environment: str = Field(
         default="development", description="Environment: development, production"
     )
-    debug: bool = Field(default=False, description="Enable debug mode")
+    debug: bool = Field(default=True, description="Enable debug mode")
 
     # Server settings
     host: str = Field(default="0.0.0.0", description="Server host")
@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     github_token: str = Field(default="", description="GitHub personal access token")
     github_organization: str = Field(default="", description="GitHub organization name")
 
+    atlassian_account_id: str = Field(default="", description="Atlassian Account ID")
     confluence_base_url: str = Field(
         default="", description="Confluence instance base URL"
     )

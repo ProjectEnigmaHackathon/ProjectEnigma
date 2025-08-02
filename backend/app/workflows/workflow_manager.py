@@ -19,6 +19,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.state import CompiledStateGraph
 
 from app.core.config import get_settings
+from app.core.logging_utils import log_workflow_function, LogLevel
 
 
 @dataclass
@@ -178,14 +179,28 @@ class WorkflowPersistence:
 
         # Handle messages serialization
         if "messages" in serialized:
-            serialized["messages"] = [
-                {
-                    "type": msg.__class__.__name__,
-                    "content": msg.content,
-                    "additional_kwargs": getattr(msg, "additional_kwargs", {}),
-                }
-                for msg in serialized["messages"]
-            ]
+            serialized_messages = []
+            for msg in serialized["messages"]:
+                # Handle both message objects and dictionaries
+                if hasattr(msg, 'content'):
+                    # It's a message object
+                    serialized_messages.append({
+                        "type": msg.__class__.__name__,
+                        "content": msg.content,
+                        "additional_kwargs": getattr(msg, "additional_kwargs", {}),
+                    })
+                elif isinstance(msg, dict) and "content" in msg:
+                    # It's already a dictionary with content
+                    serialized_messages.append(msg)
+                else:
+                    # Fallback for unknown message types
+                    serialized_messages.append({
+                        "type": "UnknownMessage",
+                        "content": str(msg),
+                        "additional_kwargs": {},
+                    })
+            
+            serialized["messages"] = serialized_messages
 
         return serialized
 
@@ -199,20 +214,32 @@ class WorkflowPersistence:
 
             messages = []
             for msg_data in state["messages"]:
-                if msg_data["type"] == "AIMessage":
-                    messages.append(
-                        AIMessage(
-                            content=msg_data["content"],
-                            additional_kwargs=msg_data.get("additional_kwargs", {}),
+                # Handle both dictionary and object message formats
+                if isinstance(msg_data, dict):
+                    msg_type = msg_data.get("type", "UnknownMessage")
+                    content = msg_data.get("content", "")
+                    additional_kwargs = msg_data.get("additional_kwargs", {})
+                    
+                    if msg_type == "AIMessage":
+                        messages.append(
+                            AIMessage(
+                                content=content,
+                                additional_kwargs=additional_kwargs,
+                            )
                         )
-                    )
-                elif msg_data["type"] == "HumanMessage":
-                    messages.append(
-                        HumanMessage(
-                            content=msg_data["content"],
-                            additional_kwargs=msg_data.get("additional_kwargs", {}),
+                    elif msg_type == "HumanMessage":
+                        messages.append(
+                            HumanMessage(
+                                content=content,
+                                additional_kwargs=additional_kwargs,
+                            )
                         )
-                    )
+                    else:
+                        # For unknown message types, keep as dictionary
+                        messages.append(msg_data)
+                else:
+                    # If it's already a message object, keep it as is
+                    messages.append(msg_data)
 
             state["messages"] = messages
 
@@ -231,6 +258,7 @@ class WorkflowManager:
         self.persistence = WorkflowPersistence() if enable_persistence else None
         self._running_workflows: Dict[str, asyncio.Task] = {}
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def start_workflow(
         self, initial_state: Dict[str, Any], workflow_id: Optional[str] = None
     ) -> str:
@@ -267,6 +295,7 @@ class WorkflowManager:
 
         return workflow_id
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def _execute_workflow(self, workflow_id: str, initial_state: Dict[str, Any]):
         """Execute workflow with error handling and state tracking."""
         start_time = time.time()
@@ -333,6 +362,7 @@ class WorkflowManager:
             # Clean up running workflow tracking
             self._running_workflows.pop(workflow_id, None)
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def resume_workflow(self, workflow_id: str) -> bool:
         """
         Resume a paused or failed workflow.
@@ -368,6 +398,7 @@ class WorkflowManager:
 
         return True
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def pause_workflow(self, workflow_id: str) -> bool:
         """
         Pause a running workflow.
@@ -391,6 +422,7 @@ class WorkflowManager:
 
         return True
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def cancel_workflow(self, workflow_id: str) -> bool:
         """
         Cancel a running workflow.
@@ -445,6 +477,7 @@ class WorkflowManager:
 
         return workflows
 
+    @log_workflow_function(level=LogLevel.INFO, include_state=True, include_result=False, include_execution_time=True, log_errors=True)
     async def get_workflow_stream(self, workflow_id: str):
         """
         Get real-time stream of workflow state updates.

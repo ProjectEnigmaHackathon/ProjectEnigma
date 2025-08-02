@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from app.workflows.workflow_manager import get_workflow_manager
+from app.core.logging_utils import log_api_endpoint, LogLevel
 
 router = APIRouter()
 
@@ -45,6 +46,7 @@ approval_timeouts: Dict[str, datetime] = {}
 
 
 @router.post("/approval")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def handle_approval_decision(request: ApprovalRequest) -> ApprovalResponse:
     """
     Handle human approval decisions for workflow checkpoints.
@@ -115,6 +117,7 @@ async def handle_approval_decision(request: ApprovalRequest) -> ApprovalResponse
 
 
 @router.get("/approval/{workflow_id}")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def get_pending_approval(workflow_id: str):
     """
     Get pending approval details for a workflow.
@@ -139,6 +142,7 @@ async def get_pending_approval(workflow_id: str):
 
 
 @router.get("/approval")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def list_pending_approvals():
     """
     List all pending approvals.
@@ -165,6 +169,7 @@ async def list_pending_approvals():
 
 
 @router.post("/workflow/action")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def workflow_action(request: WorkflowAction):
     """
     Perform actions on workflows (pause, resume, cancel).
@@ -223,6 +228,7 @@ async def workflow_action(request: WorkflowAction):
 
 
 @router.get("/workflow/{workflow_id}/status")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def get_workflow_status(workflow_id: str):
     """
     Get current workflow status and progress.
@@ -251,6 +257,7 @@ async def get_workflow_status(workflow_id: str):
 
 
 @router.get("/workflows")
+@log_api_endpoint(level=LogLevel.INFO, include_request=True, include_response=False, include_execution_time=True, log_errors=True)
 async def list_workflows():
     """
     List all workflows with their current status.
