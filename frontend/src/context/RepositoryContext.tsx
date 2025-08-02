@@ -1,1 +1,203 @@
-import React, { createContext, useContext, useReducer, useEffect } from 'react'\nimport { Repository, RepositoryRequest } from '@/types'\nimport { repositoryApi } from '@/services/api'\n\ninterface RepositoryState {\n  repositories: Repository[]\n  selectedRepositories: string[]\n  loading: boolean\n  error: string | null\n}\n\ntype RepositoryAction =\n  | { type: 'SET_LOADING'; payload: boolean }\n  | { type: 'SET_ERROR'; payload: string | null }\n  | { type: 'SET_REPOSITORIES'; payload: Repository[] }\n  | { type: 'ADD_REPOSITORY'; payload: Repository }\n  | { type: 'UPDATE_REPOSITORY'; payload: { id: string; repository: Repository } }\n  | { type: 'DELETE_REPOSITORY'; payload: string }\n  | { type: 'SET_SELECTED_REPOSITORIES'; payload: string[] }\n  | { type: 'TOGGLE_REPOSITORY_SELECTION'; payload: string }\n\ninterface RepositoryContextType extends RepositoryState {\n  // Actions\n  loadRepositories: () => Promise<void>\n  createRepository: (repository: RepositoryRequest) => Promise<void>\n  updateRepository: (id: string, repository: Partial<RepositoryRequest>) => Promise<void>\n  deleteRepository: (id: string) => Promise<void>\n  setSelectedRepositories: (repositoryIds: string[]) => void\n  toggleRepositorySelection: (repositoryId: string) => void\n  clearError: () => void\n}\n\nconst initialState: RepositoryState = {\n  repositories: [],\n  selectedRepositories: [],\n  loading: false,\n  error: null,\n}\n\nfunction repositoryReducer(state: RepositoryState, action: RepositoryAction): RepositoryState {\n  switch (action.type) {\n    case 'SET_LOADING':\n      return { ...state, loading: action.payload }\n    \n    case 'SET_ERROR':\n      return { ...state, error: action.payload, loading: false }\n    \n    case 'SET_REPOSITORIES':\n      return { ...state, repositories: action.payload, loading: false, error: null }\n    \n    case 'ADD_REPOSITORY':\n      return {\n        ...state,\n        repositories: [...state.repositories, action.payload],\n        loading: false,\n        error: null,\n      }\n    \n    case 'UPDATE_REPOSITORY':\n      return {\n        ...state,\n        repositories: state.repositories.map(repo =>\n          repo.id === action.payload.id ? action.payload.repository : repo\n        ),\n        loading: false,\n        error: null,\n      }\n    \n    case 'DELETE_REPOSITORY':\n      return {\n        ...state,\n        repositories: state.repositories.filter(repo => repo.id !== action.payload),\n        selectedRepositories: state.selectedRepositories.filter(id => id !== action.payload),\n        loading: false,\n        error: null,\n      }\n    \n    case 'SET_SELECTED_REPOSITORIES':\n      return { ...state, selectedRepositories: action.payload }\n    \n    case 'TOGGLE_REPOSITORY_SELECTION':\n      const isSelected = state.selectedRepositories.includes(action.payload)\n      return {\n        ...state,\n        selectedRepositories: isSelected\n          ? state.selectedRepositories.filter(id => id !== action.payload)\n          : [...state.selectedRepositories, action.payload],\n      }\n    \n    default:\n      return state\n  }\n}\n\nconst RepositoryContext = createContext<RepositoryContextType | undefined>(undefined)\n\nexport function RepositoryProvider({ children }: { children: React.ReactNode }) {\n  const [state, dispatch] = useReducer(repositoryReducer, initialState)\n\n  // Load repositories on mount\n  useEffect(() => {\n    loadRepositories()\n  }, [])\n\n  const loadRepositories = async () => {\n    dispatch({ type: 'SET_LOADING', payload: true })\n    \n    try {\n      const response = await repositoryApi.getAll()\n      if (response.success && response.data) {\n        dispatch({ type: 'SET_REPOSITORIES', payload: response.data })\n      } else {\n        dispatch({ type: 'SET_ERROR', payload: response.error || 'Failed to load repositories' })\n      }\n    } catch (error) {\n      dispatch({ type: 'SET_ERROR', payload: 'Network error while loading repositories' })\n    }\n  }\n\n  const createRepository = async (repository: RepositoryRequest) => {\n    dispatch({ type: 'SET_LOADING', payload: true })\n    \n    try {\n      const response = await repositoryApi.create(repository)\n      if (response.success && response.data) {\n        dispatch({ type: 'ADD_REPOSITORY', payload: response.data })\n      } else {\n        dispatch({ type: 'SET_ERROR', payload: response.error || 'Failed to create repository' })\n      }\n    } catch (error) {\n      dispatch({ type: 'SET_ERROR', payload: 'Network error while creating repository' })\n    }\n  }\n\n  const updateRepository = async (id: string, repository: Partial<RepositoryRequest>) => {\n    dispatch({ type: 'SET_LOADING', payload: true })\n    \n    try {\n      const response = await repositoryApi.update(id, repository)\n      if (response.success && response.data) {\n        dispatch({ type: 'UPDATE_REPOSITORY', payload: { id, repository: response.data } })\n      } else {\n        dispatch({ type: 'SET_ERROR', payload: response.error || 'Failed to update repository' })\n      }\n    } catch (error) {\n      dispatch({ type: 'SET_ERROR', payload: 'Network error while updating repository' })\n    }\n  }\n\n  const deleteRepository = async (id: string) => {\n    dispatch({ type: 'SET_LOADING', payload: true })\n    \n    try {\n      const response = await repositoryApi.delete(id)\n      if (response.success) {\n        dispatch({ type: 'DELETE_REPOSITORY', payload: id })\n      } else {\n        dispatch({ type: 'SET_ERROR', payload: response.error || 'Failed to delete repository' })\n      }\n    } catch (error) {\n      dispatch({ type: 'SET_ERROR', payload: 'Network error while deleting repository' })\n    }\n  }\n\n  const setSelectedRepositories = (repositoryIds: string[]) => {\n    dispatch({ type: 'SET_SELECTED_REPOSITORIES', payload: repositoryIds })\n  }\n\n  const toggleRepositorySelection = (repositoryId: string) => {\n    dispatch({ type: 'TOGGLE_REPOSITORY_SELECTION', payload: repositoryId })\n  }\n\n  const clearError = () => {\n    dispatch({ type: 'SET_ERROR', payload: null })\n  }\n\n  const value: RepositoryContextType = {\n    ...state,\n    loadRepositories,\n    createRepository,\n    updateRepository,\n    deleteRepository,\n    setSelectedRepositories,\n    toggleRepositorySelection,\n    clearError,\n  }\n\n  return (\n    <RepositoryContext.Provider value={value}>\n      {children}\n    </RepositoryContext.Provider>\n  )\n}\n\nexport function useRepositories() {\n  const context = useContext(RepositoryContext)\n  if (context === undefined) {\n    throw new Error('useRepositories must be used within a RepositoryProvider')\n  }\n  return context\n}\n\nexport default RepositoryContext
+import React, { createContext, useContext, useReducer, useEffect } from 'react'
+import { Repository, RepositoryRequest } from '@/types'
+import { repositoryApi } from '@/services/api'
+
+interface RepositoryState {
+  repositories: Repository[]
+  selectedRepositories: string[]
+  loading: boolean
+  error: string | null
+}
+
+type RepositoryAction =
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_ERROR'; payload: string | null }
+  | { type: 'SET_REPOSITORIES'; payload: Repository[] }
+  | { type: 'ADD_REPOSITORY'; payload: Repository }
+  | { type: 'UPDATE_REPOSITORY'; payload: { id: string; repository: Repository } }
+  | { type: 'DELETE_REPOSITORY'; payload: string }
+  | { type: 'SET_SELECTED_REPOSITORIES'; payload: string[] }
+  | { type: 'TOGGLE_REPOSITORY_SELECTION'; payload: string }
+
+interface RepositoryContextType extends RepositoryState {
+  // Actions
+  loadRepositories: () => Promise<void>
+  createRepository: (repository: RepositoryRequest) => Promise<void>
+  updateRepository: (id: string, repository: Partial<RepositoryRequest>) => Promise<void>
+  deleteRepository: (id: string) => Promise<void>
+  setSelectedRepositories: (repositoryIds: string[]) => void
+  toggleRepositorySelection: (repositoryId: string) => void
+  clearError: () => void
+}
+
+const initialState: RepositoryState = {
+  repositories: [],
+  selectedRepositories: [],
+  loading: false,
+  error: null,
+}
+
+function repositoryReducer(state: RepositoryState, action: RepositoryAction): RepositoryState {
+  switch (action.type) {
+    case 'SET_LOADING':
+      return { ...state, loading: action.payload }
+    
+    case 'SET_ERROR':
+      return { ...state, error: action.payload, loading: false }
+    
+    case 'SET_REPOSITORIES':
+      return { ...state, repositories: action.payload, loading: false, error: null }
+    
+    case 'ADD_REPOSITORY':
+      return {
+        ...state,
+        repositories: [...state.repositories, action.payload],
+        loading: false,
+        error: null,
+      }
+    
+    case 'UPDATE_REPOSITORY':
+      return {
+        ...state,
+        repositories: state.repositories.map(repo =>
+          repo.id === action.payload.id ? action.payload.repository : repo
+        ),
+        loading: false,
+        error: null,
+      }
+    
+    case 'DELETE_REPOSITORY':
+      return {
+        ...state,
+        repositories: state.repositories.filter(repo => repo.id !== action.payload),
+        selectedRepositories: state.selectedRepositories.filter(id => id !== action.payload),
+        loading: false,
+        error: null,
+      }
+    
+    case 'SET_SELECTED_REPOSITORIES':
+      return { ...state, selectedRepositories: action.payload }
+    
+    case 'TOGGLE_REPOSITORY_SELECTION':
+      const isSelected = state.selectedRepositories.includes(action.payload)
+      return {
+        ...state,
+        selectedRepositories: isSelected
+          ? state.selectedRepositories.filter(id => id !== action.payload)
+          : [...state.selectedRepositories, action.payload],
+      }
+    
+    default:
+      return state
+  }
+}
+
+const RepositoryContext = createContext<RepositoryContextType | undefined>(undefined)
+
+export function RepositoryProvider({ children }: { children: React.ReactNode }) {
+  const [state, dispatch] = useReducer(repositoryReducer, initialState)
+
+  // Load repositories on mount
+  useEffect(() => {
+    loadRepositories()
+  }, [])
+
+  const loadRepositories = async () => {
+    dispatch({ type: 'SET_LOADING', payload: true })
+    
+    try {
+      const response = await repositoryApi.getAll()
+      if (response.success && response.data) {
+        dispatch({ type: 'SET_REPOSITORIES', payload: response.data })
+      } else {
+        dispatch({ type: 'SET_ERROR', payload: response.error || 'Failed to load repositories' })
+      }
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', payload: 'Network error while loading repositories' })
+    }
+  }
+
+  const createRepository = async (repository: RepositoryRequest) => {
+    dispatch({ type: 'SET_LOADING', payload: true })
+    
+    try {
+      const response = await repositoryApi.create(repository)
+      if (response.success && response.data) {
+        dispatch({ type: 'ADD_REPOSITORY', payload: response.data })
+      } else {
+        dispatch({ type: 'SET_ERROR', payload: response.error || 'Failed to create repository' })
+      }
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', payload: 'Network error while creating repository' })
+    }
+  }
+
+  const updateRepository = async (id: string, repository: Partial<RepositoryRequest>) => {
+    dispatch({ type: 'SET_LOADING', payload: true })
+    
+    try {
+      const response = await repositoryApi.update(id, repository)
+      if (response.success && response.data) {
+        dispatch({ type: 'UPDATE_REPOSITORY', payload: { id, repository: response.data } })
+      } else {
+        dispatch({ type: 'SET_ERROR', payload: response.error || 'Failed to update repository' })
+      }
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', payload: 'Network error while updating repository' })
+    }
+  }
+
+  const deleteRepository = async (id: string) => {
+    dispatch({ type: 'SET_LOADING', payload: true })
+    
+    try {
+      const response = await repositoryApi.delete(id)
+      if (response.success) {
+        dispatch({ type: 'DELETE_REPOSITORY', payload: id })
+      } else {
+        dispatch({ type: 'SET_ERROR', payload: response.error || 'Failed to delete repository' })
+      }
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', payload: 'Network error while deleting repository' })
+    }
+  }
+
+  const setSelectedRepositories = (repositoryIds: string[]) => {
+    dispatch({ type: 'SET_SELECTED_REPOSITORIES', payload: repositoryIds })
+  }
+
+  const toggleRepositorySelection = (repositoryId: string) => {
+    dispatch({ type: 'TOGGLE_REPOSITORY_SELECTION', payload: repositoryId })
+  }
+
+  const clearError = () => {
+    dispatch({ type: 'SET_ERROR', payload: null })
+  }
+
+  const value: RepositoryContextType = {
+    ...state,
+    loadRepositories,
+    createRepository,
+    updateRepository,
+    deleteRepository,
+    setSelectedRepositories,
+    toggleRepositorySelection,
+    clearError,
+  }
+
+  return (
+    <RepositoryContext.Provider value={value}>
+      {children}
+    </RepositoryContext.Provider>
+  )
+}
+
+export function useRepositories() {
+  const context = useContext(RepositoryContext)
+  if (context === undefined) {
+    throw new Error('useRepositories must be used within a RepositoryProvider')
+  }
+  return context
+}
+
+export default RepositoryContext

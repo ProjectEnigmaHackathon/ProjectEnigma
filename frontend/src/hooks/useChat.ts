@@ -31,7 +31,7 @@ function useChat(options: UseChatOptions = {}) {
   const [retryCount, setRetryCount] = useState(0);
   const streamReaderRef =
     useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<number | null>(null);
   const maxRetries = 3;
 
   // Add a new message
@@ -67,7 +67,7 @@ function useChat(options: UseChatOptions = {}) {
       context?: Record<string, any>
     ) => {
       // Add user message
-      const userMessage = addMessage({
+      addMessage({
         type: "user",
         content,
         status: "sent",

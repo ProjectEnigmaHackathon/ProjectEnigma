@@ -67,7 +67,7 @@ const ChatPage: React.FC = () => {
       
       // Check if this step requires approval
       if (event.step === 'human_approval' && event.status === 'running') {
-        checkForPendingApproval(currentWorkflowId || event.workflow_id)
+        checkForPendingApproval(currentWorkflowId || event.workflow_id || null)
       }
     }
   })

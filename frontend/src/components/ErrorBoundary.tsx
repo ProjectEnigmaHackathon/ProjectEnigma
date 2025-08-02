@@ -6,13 +6,12 @@
  */
 
 import React, { Component, ReactNode } from 'react';
-import { Button } from './ui/Button';
-import { Modal } from './ui/Modal';
+import Button from './ui/Button';
+import Modal from './ui/Modal';
 
 interface ErrorInfo {
   componentStack: string;
   errorBoundary?: string;
-  errorInfo?: string;
 }
 
 interface ErrorBoundaryState {
@@ -35,12 +34,9 @@ interface ErrorBoundaryProps {
 
 /**
  * Main Error Boundary Component
- * 
- * Catches JavaScript errors anywhere in the child component tree,
- * logs those errors, and displays a fallback UI.
  */
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  private retryTimeoutId: NodeJS.Timeout | null = null;
+  private retryTimeoutId: number | null = null;
 
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -56,7 +52,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-    // Update state so the next render will show the fallback UI
     return {
       hasError: true,
       error,
@@ -68,9 +63,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     const errorId = this.state.errorId || generateErrorId();
     
     const customErrorInfo: ErrorInfo = {
-      componentStack: errorInfo.componentStack,
-      errorBoundary: this.constructor.name,
-      errorInfo: errorInfo.errorInfo,
+      componentStack: errorInfo.componentStack || '',
+      errorBoundary: 'ErrorBoundary',
     };
 
     this.setState({
@@ -78,7 +72,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       errorId,
     });
 
-    // Log error details for debugging
     console.error('Error Boundary caught an error:', {
       errorId,
       error: error.message,
@@ -87,12 +80,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       timestamp: new Date().toISOString(),
     });
 
-    // Call custom error handler if provided
     if (this.props.onError) {
       this.props.onError(error, customErrorInfo, errorId);
     }
 
-    // Report error to monitoring service (in production)
     this.reportError(error, customErrorInfo, errorId);
   }
 
@@ -104,8 +95,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   reportError = async (error: Error, errorInfo: ErrorInfo, errorId: string) => {
     try {
-      // In production, send error to monitoring service
-      if (process.env.NODE_ENV === 'production') {
+      if (window.location.hostname !== 'localhost') {
         await fetch('/api/errors/report', {
           method: 'POST',
           headers: {
@@ -149,7 +139,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   };
 
   handleRetryWithDelay = (delay: number = 1000) => {
-    this.retryTimeoutId = setTimeout(() => {
+    this.retryTimeoutId = window.setTimeout(() => {
       this.handleRetry();
     }, delay);
   };
@@ -175,18 +165,15 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     } = this.props;
 
     if (hasError) {
-      // Custom fallback UI provided
       if (fallback) {
         return fallback;
       }
 
-      // Default error UI
       return (
         <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
           <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
             <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
               <div className="text-center">
-                {/* Error Icon */}
                 <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
                   <svg
                     className="h-6 w-6 text-red-600"
@@ -204,7 +191,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   </svg>
                 </div>
 
-                {/* Error Message */}
                 <h3 className="mt-4 text-lg font-medium text-gray-900">
                   Something went wrong
                 </h3>
@@ -212,12 +198,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   We encountered an unexpected error. Please try again or reload the page.
                 </p>
 
-                {/* Error ID */}
                 <p className="mt-2 text-xs text-gray-400">
                   Error ID: {errorId}
                 </p>
 
-                {/* Action Buttons */}
                 <div className="mt-6 space-y-3">
                   {enableRetry && retryCount < maxRetries && (
                     <div className="space-y-2">
@@ -257,7 +241,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   )}
                 </div>
 
-                {/* Retry Information */}
                 {retryCount > 0 && (
                   <p className="mt-4 text-xs text-gray-500">
                     Retry attempt: {retryCount}/{maxRetries}
@@ -267,7 +250,6 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             </div>
           </div>
 
-          {/* Error Details Modal */}
           {showDetails && (
             <Modal
               isOpen={showDetails}
@@ -369,7 +351,7 @@ export const WorkflowErrorBoundary: React.FC<{
   onWorkflowError?: (error: Error, workflowId?: string) => void;
   workflowId?: string;
 }> = ({ children, onWorkflowError, workflowId }) => {
-  const handleError = (error: Error, errorInfo: ErrorInfo, errorId: string) => {
+  const handleError = (error: Error, _errorInfo: ErrorInfo, errorId: string) => {
     console.error('Workflow error:', { error, workflowId, errorId });
     onWorkflowError?.(error, workflowId);
   };
@@ -422,6 +404,8 @@ export const WorkflowErrorBoundary: React.FC<{
 function generateErrorId(): string {
   return `err_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
+
+export default ErrorBoundary;
 
 // Export types for use in other components
 export type { ErrorInfo, ErrorBoundaryProps, ErrorBoundaryState };

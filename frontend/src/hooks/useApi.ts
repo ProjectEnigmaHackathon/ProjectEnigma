@@ -1,1 +1,50 @@
-import { useState, useCallback } from 'react'\nimport { ApiResponse, AsyncState } from '@/types'\n\n/**\n * Custom hook for managing API calls with loading states\n */\nfunction useApi<T>() {\n  const [state, setState] = useState<AsyncState<T>>({\n    data: null,\n    loading: false,\n    error: null,\n  })\n\n  const execute = useCallback(async (\n    apiCall: () => Promise<ApiResponse<T>>,\n    onSuccess?: (data: T) => void,\n    onError?: (error: string) => void\n  ) => {\n    setState({ data: null, loading: true, error: null })\n\n    try {\n      const response = await apiCall()\n      \n      if (response.success && response.data) {\n        setState({ data: response.data, loading: false, error: null })\n        onSuccess?.(response.data)\n      } else {\n        const errorMessage = response.error || 'Unknown error occurred'\n        setState({ data: null, loading: false, error: errorMessage })\n        onError?.(errorMessage)\n      }\n    } catch (error) {\n      const errorMessage = error instanceof Error ? error.message : 'Network error'\n      setState({ data: null, loading: false, error: errorMessage })\n      onError?.(errorMessage)\n    }\n  }, [])\n\n  const reset = useCallback(() => {\n    setState({ data: null, loading: false, error: null })\n  }, [])\n\n  return {\n    ...state,\n    execute,\n    reset,\n  }\n}\n\nexport default useApi
+import { useState, useCallback } from 'react'
+import { ApiResponse, AsyncState } from '@/types'
+
+/**
+ * Custom hook for managing API calls with loading states
+ */
+function useApi<T>() {
+  const [state, setState] = useState<AsyncState<T>>({
+    data: null,
+    loading: false,
+    error: null,
+  })
+
+  const execute = useCallback(async (
+    apiCall: () => Promise<ApiResponse<T>>,
+    onSuccess?: (data: T) => void,
+    onError?: (error: string) => void
+  ) => {
+    setState({ data: null, loading: true, error: null })
+
+    try {
+      const response = await apiCall()
+      
+      if (response.success && response.data) {
+        setState({ data: response.data, loading: false, error: null })
+        onSuccess?.(response.data)
+      } else {
+        const errorMessage = response.error || 'Unknown error occurred'
+        setState({ data: null, loading: false, error: errorMessage })
+        onError?.(errorMessage)
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Network error'
+      setState({ data: null, loading: false, error: errorMessage })
+      onError?.(errorMessage)
+    }
+  }, [])
+
+  const reset = useCallback(() => {
+    setState({ data: null, loading: false, error: null })
+  }, [])
+
+  return {
+    ...state,
+    execute,
+    reset,
+  }
+}
+
+export default useApi

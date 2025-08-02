@@ -1,1 +1,2 @@
-export { AppProvider, useApp } from './AppContext'\nexport { RepositoryProvider, useRepositories } from './RepositoryContext'
+export { AppProvider, useApp } from './AppContext'
+export { RepositoryProvider, useRepositories } from './RepositoryContext'

@@ -1,1 +1,65 @@
-import { useState, useEffect, useCallback } from 'react'\n\n/**\n * Custom hook for managing localStorage with React state\n */\nfunction useLocalStorage<T>(\n  key: string,\n  initialValue: T\n): [T, (value: T | ((val: T) => T)) => void, () => void] {\n  // Get value from localStorage or use initial value\n  const [storedValue, setStoredValue] = useState<T>(() => {\n    try {\n      const item = window.localStorage.getItem(key)\n      return item ? JSON.parse(item) : initialValue\n    } catch (error) {\n      console.warn(`Error reading localStorage key \"${key}\":`, error)\n      return initialValue\n    }\n  })\n\n  // Update localStorage and state\n  const setValue = useCallback(\n    (value: T | ((val: T) => T)) => {\n      try {\n        // Allow value to be a function so we have the same API as useState\n        const valueToStore = value instanceof Function ? value(storedValue) : value\n        setStoredValue(valueToStore)\n        window.localStorage.setItem(key, JSON.stringify(valueToStore))\n      } catch (error) {\n        console.warn(`Error setting localStorage key \"${key}\":`, error)\n      }\n    },\n    [key, storedValue]\n  )\n\n  // Remove value from localStorage\n  const removeValue = useCallback(() => {\n    try {\n      window.localStorage.removeItem(key)\n      setStoredValue(initialValue)\n    } catch (error) {\n      console.warn(`Error removing localStorage key \"${key}\":`, error)\n    }\n  }, [key, initialValue])\n\n  // Listen for storage changes from other tabs\n  useEffect(() => {\n    const handleStorageChange = (e: StorageEvent) => {\n      if (e.key === key && e.newValue !== null) {\n        try {\n          setStoredValue(JSON.parse(e.newValue))\n        } catch (error) {\n          console.warn(`Error parsing localStorage value for key \"${key}\":`, error)\n        }\n      }\n    }\n\n    window.addEventListener('storage', handleStorageChange)\n    return () => window.removeEventListener('storage', handleStorageChange)\n  }, [key])\n\n  return [storedValue, setValue, removeValue]\n}\n\nexport default useLocalStorage
+import { useState, useEffect, useCallback } from 'react'
+
+/**
+ * Custom hook for managing localStorage with React state
+ */
+function useLocalStorage<T>(
+  key: string,
+  initialValue: T
+): [T, (value: T | ((val: T) => T)) => void, () => void] {
+  // Get value from localStorage or use initial value
+  const [storedValue, setStoredValue] = useState<T>(() => {
+    try {
+      const item = window.localStorage.getItem(key)
+      return item ? JSON.parse(item) : initialValue
+    } catch (error) {
+      console.warn(`Error reading localStorage key "${key}":`, error)
+      return initialValue
+    }
+  })
+
+  // Update localStorage and state
+  const setValue = useCallback(
+    (value: T | ((val: T) => T)) => {
+      try {
+        // Allow value to be a function so we have the same API as useState
+        const valueToStore = value instanceof Function ? value(storedValue) : value
+        setStoredValue(valueToStore)
+        window.localStorage.setItem(key, JSON.stringify(valueToStore))
+      } catch (error) {
+        console.warn(`Error setting localStorage key "${key}":`, error)
+      }
+    },
+    [key, storedValue]
+  )
+
+  // Remove value from localStorage
+  const removeValue = useCallback(() => {
+    try {
+      window.localStorage.removeItem(key)
+      setStoredValue(initialValue)
+    } catch (error) {
+      console.warn(`Error removing localStorage key "${key}":`, error)
+    }
+  }, [key, initialValue])
+
+  // Listen for storage changes from other tabs
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === key && e.newValue !== null) {
+        try {
+          setStoredValue(JSON.parse(e.newValue))
+        } catch (error) {
+          console.warn(`Error parsing localStorage value for key "${key}":`, error)
+        }
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [key])
+
+  return [storedValue, setValue, removeValue]
+}
+
+export default useLocalStorage

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Plus, Trash2, Save, CheckCircle, ExternalLink, AlertTriangle } from 'lucide-react'
+import { Plus, Trash2, CheckCircle, ExternalLink, AlertTriangle } from 'lucide-react'
 import { Button, Input, LoadingSpinner, Modal } from '@/components/ui'
 import { useRepositories, useApp } from '@/context'
 import { validateRepositoryName, validateRepositoryUrl, parseGitHubUrl } from '@/utils'

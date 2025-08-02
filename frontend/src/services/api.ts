@@ -91,24 +91,7 @@ export const repositoryApi = {
   },
 };
 
-// Helper function to parse streaming data
-function parseStreamChunk(chunk: string): any[] {
-  const lines = chunk.split("\n");
-  const messages: any[] = [];
-
-  for (const line of lines) {
-    if (line.startsWith("data: ")) {
-      try {
-        const data = JSON.parse(line.slice(6));
-        messages.push(data);
-      } catch (error) {
-        console.warn("Failed to parse streaming data:", line);
-      }
-    }
-  }
-
-  return messages;
-}
+// Helper function to parse streaming data (removed as unused)
 
 // Chat API with LangGraph streaming support
 export const chatApi = {

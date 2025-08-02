@@ -200,6 +200,9 @@ export interface WorkflowEvent {
     | "approval_required";
   data: any;
   timestamp: Date;
+  workflow_id?: string;
+  step?: string;
+  status?: string;
 }
 
 // Streaming message types (matching backend StreamMessage)
