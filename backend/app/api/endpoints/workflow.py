@@ -82,6 +82,7 @@ async def handle_approval_decision(request: ApprovalRequest) -> ApprovalResponse
                 "approval_id": approval_id,
             }
             current_state["approval_required"] = False
+            current_state["workflow_paused"] = False  # Clear pause flag
 
             # Get and update metadata
             metadata = workflow_manager.state_store.get_metadata(request.workflow_id)
@@ -332,6 +333,7 @@ async def cleanup_expired_approvals():
                         "approval_id": pending_approvals[workflow_id]["approval_id"],
                     }
                     current_state["approval_required"] = False
+                    current_state["workflow_paused"] = False  # Clear pause flag
 
                     # Update metadata
                     metadata = workflow_manager.state_store.get_metadata(workflow_id)
