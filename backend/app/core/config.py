@@ -28,13 +28,9 @@ class Settings(BaseSettings):
     port: int = Field(default=8000, description="Server port")
 
     # CORS settings
-    allowed_origins: List[str] = Field(
-        default=[
-            "http://localhost:3000",
-            "http://localhost:5173",
-            "http://127.0.0.1:3000",
-        ],
-        description="Allowed CORS origins",
+    allowed_origins: str = Field(
+        default="http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000",
+        description="Allowed CORS origins (comma-separated)",
     )
 
     # API Integration settings
@@ -88,12 +84,17 @@ class Settings(BaseSettings):
             )
         return v
 
-    @validator("allowed_origins", pre=True)
+    @validator("allowed_origins")
     def parse_cors_origins(cls, v):
-        """Parse CORS origins from string or list."""
+        """Parse CORS origins from string."""
         if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
-        return v
+            return v
+        return ",".join(v) if isinstance(v, list) else str(v)
+
+    @property
+    def allowed_origins_list(self) -> List[str]:
+        """Get allowed origins as a list."""
+        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
 
     class Config:
         env_file = ".env"

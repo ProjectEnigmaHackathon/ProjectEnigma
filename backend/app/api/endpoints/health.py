@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.core.config import Settings, get_settings
-from app.integrations.auth_manager import AuthManager
+from app.integrations.auth_manager import AuthenticationManager as AuthManager
 from app.models.api import HealthResponse, MetricsResponse, SystemStatus
 
 logger = structlog.get_logger()

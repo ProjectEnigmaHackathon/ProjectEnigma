@@ -28,7 +28,6 @@ from app.core.middleware import (
     SecurityHeadersMiddleware,
 )
 
-
 def setup_logging() -> None:
     """Configure enhanced structured logging for the application."""
     from app.core.logging import setup_enhanced_logging
@@ -74,14 +73,14 @@ def create_app() -> FastAPI:
         description="AI-powered release documentation automation backend",
         version="0.1.0",
         lifespan=lifespan,
-        docs_url="/api/docs" if settings.environment == "development" else None,
-        redoc_url="/api/redoc" if settings.environment == "development" else None,
+        docs_url="/docs" if settings.environment == "development" else None,
+        redoc_url="/redoc" if settings.environment == "development" else None,
     )
 
     # Configure CORS
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.allowed_origins,
+        allow_origins=settings.allowed_origins_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -95,8 +94,19 @@ def create_app() -> FastAPI:
     # Setup exception handlers
     setup_exception_handlers(app)
 
-    # Include API routes
-    app.include_router(api_router, prefix="/api")
+    # Include API routes with debugging
+    try:
+        logger.info("Including API routes", router_routes=len(api_router.routes))
+        app.include_router(api_router, prefix="/api")
+        logger.info("API routes included successfully")
+        
+        # Debug: Print all registered routes
+        for route in app.routes:
+            if hasattr(route, 'path'):
+                logger.info("Registered route", path=route.path, methods=getattr(route, 'methods', []))
+    except Exception as e:
+        logger.error("Failed to include API routes", error=str(e))
+        raise
 
     # Serve static files (React frontend) if build directory exists
     frontend_build_paths = [
@@ -133,6 +143,27 @@ app = create_app()
 async def health_check():
     """Simple health check endpoint."""
     return {"status": "healthy", "service": "project-enigma-backend"}
+
+
+# Root endpoint
+@app.get("/")
+async def root():
+    """Root endpoint with API information."""
+    return {
+        "message": "Project Enigma Backend API",
+        "version": "0.1.0",
+        "docs": "/docs",
+        "health": "/health",
+        "api_base": "/api"
+    }
+
+
+# Redirect /api/docs to /docs for convenience
+@app.get("/api/docs")
+async def redirect_to_docs():
+    """Redirect to the main docs page."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/docs")
 
 
 if __name__ == "__main__":
