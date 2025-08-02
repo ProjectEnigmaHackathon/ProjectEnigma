@@ -1,0 +1,6 @@
+---
+alwaysApply: true
+---
+
+- DO NOT write code unless and until asked.
+- For virtual environment, always use existing venv virtual environment in backend folder.

@@ -1,0 +1,69 @@
+# Docker Compose for Development Environment
+# Use: docker-compose up --build
+
+version: '3.8'
+
+services:
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: enigma-backend-dev
+    ports:
+      - "8000:8000"
+    environment:
+      - ENIGMA_ENVIRONMENT=development
+      - ENIGMA_DEBUG=true
+      - ENIGMA_HOST=0.0.0.0
+      - ENIGMA_PORT=8000
+      - ENIGMA_USE_MOCK_APIS=true
+      # API credentials (use mock values for development)
+      - ENIGMA_JIRA_BASE_URL=https://your-jira.atlassian.net
+      - ENIGMA_JIRA_USERNAME=your-username
+      - ENIGMA_JIRA_TOKEN=your-jira-token
+      - ENIGMA_GITHUB_TOKEN=your-github-token
+      - ENIGMA_GITHUB_ORGANIZATION=your-org
+      - ENIGMA_CONFLUENCE_BASE_URL=https://your-confluence.atlassian.net
+      - ENIGMA_CONFLUENCE_USERNAME=your-username
+      - ENIGMA_CONFLUENCE_TOKEN=your-confluence-token
+    volumes:
+      - ./backend:/app
+      - ./config:/app/config
+      - backend_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend Development Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: enigma-frontend-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - VITE_API_BASE_URL=http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    restart: unless-stopped
+    depends_on:
+      - backend
+    stdin_open: true
+    tty: true
+
+volumes:
+  backend_data:
+    driver: local
+
+networks:
+  default:
+    name: enigma-network
